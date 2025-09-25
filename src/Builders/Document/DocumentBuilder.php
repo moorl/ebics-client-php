@@ -4,10 +4,9 @@ namespace EbicsApi\Ebics\Builders\Document;
 
 use DateTime;
 use DOMElement;
-use EbicsApi\Ebics\Contracts\OrderDataInterface;
 use EbicsApi\Ebics\Contracts\PostalAddressInterface;
 use EbicsApi\Ebics\Handlers\Traits\XPathTrait;
-use EbicsApi\Ebics\Models\DOMDocument;
+use EbicsApi\Ebics\Models\XmlData;
 use EbicsApi\Ebics\Services\DOMHelper;
 use EbicsApi\Ebics\Services\RandomService;
 
@@ -23,7 +22,7 @@ abstract class DocumentBuilder
     use XPathTrait;
 
     protected RandomService $randomService;
-    protected ?DOMDocument $instance = null;
+    protected ?XmlData $instance = null;
     protected string $ns;
 
     public function __construct(
@@ -35,7 +34,7 @@ abstract class DocumentBuilder
         $this->ns = sprintf("urn:iso:std:iso:20022:tech:xsd:%s", $split[0]);
     }
 
-    public function popInstance(): DOMDocument
+    public function popInstance(): XmlData
     {
         $instance = $this->instance;
         $this->instance = null;
