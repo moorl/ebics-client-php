@@ -1,0 +1,85 @@
+# .github/workflows/release.yml
+name: Tag from composer.json version
+
+on:
+    workflow_dispatch:
+    push:
+        branches: [ "3.x" ]
+        paths:
+            - composer.json
+
+permissions:
+    contents: write
+
+jobs:
+    create-tag:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository (with history & tags)
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Install jq
+              run: sudo apt-get update && sudo apt-get install -y jq
+
+            - name: Get current and previous version
+              id: versions
+              shell: bash
+              run: |
+                  # extract current version from composer.json
+                  CURR_VERSION=$(jq -r '.version // empty' composer.json)
+                  if [ -z "$CURR_VERSION" ] || [ "$CURR_VERSION" = "null" ]; then
+                    echo "composer.json has no .version field – aborting."
+                    exit 1
+                  fi
+
+                  # get previous version from previous commit if composer.json existed there
+                  if git rev-parse HEAD~1 >/dev/null 2>&1; then
+                    if git show HEAD~1:composer.json >/dev/null 2>&1; then
+                      PREV_VERSION=$(git show HEAD~1:composer.json | jq -r '.version // empty')
+                    else
+                      PREV_VERSION=""
+                    fi
+                  else
+                    PREV_VERSION=""
+                  fi
+
+                  echo "curr=$CURR_VERSION" >> "$GITHUB_OUTPUT"
+                  echo "prev=$PREV_VERSION" >> "$GITHUB_OUTPUT"
+
+            - name: Continue only if version changed
+              if: steps.versions.outputs.curr != steps.versions.outputs.prev
+              run: |
+                  echo "Version changed: ${{ steps.versions.outputs.prev }} -> ${{ steps.versions.outputs.curr }}"
+
+            - name: Stop if version is unchanged
+              if: steps.versions.outputs.curr == steps.versions.outputs.prev
+              run: |
+                  echo "Version unchanged (${{ steps.versions.outputs.curr }}) – no tag needed."
+                  exit 0
+
+            - name: Check if tag already exists
+              id: check_tag
+              run: |
+                  TAG="v${{ steps.versions.outputs.curr }}"
+                  if git rev-parse "refs/tags/$TAG" >/dev/null 2>&1 || \
+                     git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+                    echo "exists=true" >> "$GITHUB_OUTPUT"
+                  else
+                    echo "exists=false" >> "$GITHUB_OUTPUT"
+                  fi
+
+            - name: Create and push tag (with v prefix)
+              if: steps.check_tag.outputs.exists == 'false'
+              run: |
+                  TAG="v${{ steps.versions.outputs.curr }}"
+                  git config user.name "github-actions[bot]"
+                  git config user.email "github-actions[bot]@users.noreply.github.com"
+                  git tag "$TAG"
+                  git push origin "$TAG"
+
+            - name: Info if tag already exists
+              if: steps.check_tag.outputs.exists == 'true'
+              run: echo "Tag v${{ steps.versions.outputs.curr }} already exists – nothing to do."
